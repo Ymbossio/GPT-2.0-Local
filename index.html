@@ -107,6 +107,18 @@ form{
         }
     }
 }
+
+small{
+    font-size: 10px;
+    color: #555;
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    margin: auto;
+    width: 400px;
+}
+
    </style>
 
     <script type="module">
@@ -114,12 +126,6 @@ form{
         //Importando modelo 
         import { CreateMLCEngine } from 'https://esm.run/@mlc-ai/web-llm'
 
-        const SELECTED_MODEL = 'gemma-2b-it-q4f16_1-MLC'
-        const engine = await CreateMLCEngine( SELECTED_MODEL,{
-            initProgressCallback: (info) =>{
-                console.log(info)
-            }
-        })
 
 
         const $ = el => document.querySelector(el)
@@ -130,8 +136,22 @@ form{
         const $messages = $('ul')
         const $container = $('main')
         const $button = $('button')
+        const $info = $('small')
 
-        $form.addEventListener('submit', (event) => {
+        let messages = []
+
+        const SELECTED_MODEL = 'gemma-2b-it-q4f16_1-MLC'
+        const engine = await CreateMLCEngine( SELECTED_MODEL,{
+            initProgressCallback: (info) =>{
+                console.log(info)
+                $info.textContent = `${info.text}%`
+                if(info.progress == 1){
+                    $button.removeAttribute('disabled')
+                }
+            }
+        })
+
+        $form.addEventListener('submit', async (event) => {
             event.preventDefault()
             const messageText = $input.value.trim()
 
@@ -140,13 +160,38 @@ form{
             }
 
             addMessage(messageText, 'user')
-            $button.setAttribute('disabled', true)
+            $button.setAttribute('disabled', '')
 
 
-            setTimeout(()=>{
-                addMessage('Hol, como estas', 'bot')
-                $button.removeAttribute('disabled')
-            }, 2000)
+            const userMessage = {
+                role: 'user',
+                content: messageText
+            }
+
+            messages.push(userMessage)
+
+            const chuncks = await engine.chat.completions.create({
+                messages,
+                stream: true
+            })
+
+            let reply = ""
+
+            const $botMessage = addMessage("", 'bot')
+
+            for await (const chunk of chuncks){
+                const choice = chunck.choices[0]
+                const content = choice?.delta?.content ?? ""
+                reply += content
+                $botMessage.textContent = reply
+            }
+
+            $button.removeAttribute('disabled')
+            messages.psuh({
+                role: 'assistant',
+                content: reply
+            })
+            $container.scrollTop = $container.scrollHeight
         })
 
 
@@ -165,6 +210,7 @@ form{
             $messages.appendChild($newMessage)
             $container.scrollTop = $container.scrollHeight
 
+            return $text
         }
         
     </script>
@@ -172,25 +218,16 @@ form{
 </head>
 <body>
    <main>
-    <ul>
-        <li class="message bot">
-            <span>GPT</span>
-            <p>está es la respuesta del bot</p>
-            
-        </li>
-
-        <li class="message user">
-            <span>Tú</span>
-            <p>Está es la respuesta del usuario</p>
-        </li>
-    </ul>
+    <ul></ul>
    </main>
 
 
    <form>
         <input name="message" placeholder="Escribe tu mensaje aquí">
-        <button>Enviar </button>
+        <button disabled>Enviar</button>
    </form>
+
+   <small>&nbsp;</small>
 
    <template id="message-template">
     <li class="message">
